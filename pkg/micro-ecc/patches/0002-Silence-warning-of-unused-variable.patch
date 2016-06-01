@@ -1,0 +1,25 @@
+From 752ec996866e2251caee46d4daf63bed9d7deec4 Mon Sep 17 00:00:00 2001
+From: Wentao Shang <wentaoshang@gmail.com>
+Date: Wed, 1 Jun 2016 15:00:43 -0700
+Subject: [PATCH 2/2] Silence warning of unused variable
+
+---
+ curve-specific.inc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/curve-specific.inc b/curve-specific.inc
+index 0453b21..e17e75c 100644
+--- a/curve-specific.inc
++++ b/curve-specific.inc
+@@ -563,7 +563,7 @@ static void mod_sqrt_secp224r1(uECC_word_t *a, uECC_Curve curve) {
+         }
+     }
+     uECC_vli_modInv(f1, e0, curve_secp224r1.p, num_words_secp224r1); /* f1 <-- 1 / e0 */
+-    uECC_vli_modMult_fast(a, d0, f1, &curve_secp224r1);              /* a  <-- d0 / e0 */
++    uECC_vli_modMult_fast(a, d0, f1, curve);              /* a  <-- d0 / e0 */
+ }
+ #endif /* uECC_SUPPORT_COMPRESSED_POINT */
+ 
+-- 
+2.7.4
+
