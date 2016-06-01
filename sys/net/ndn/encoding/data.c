@@ -26,6 +26,31 @@
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
+typedef struct uECC_SHA256_HashContext {
+    uECC_HashContext uECC;
+    sha256_context_t ctx;
+} uECC_SHA256_HashContext;
+
+static void _init_sha256(const uECC_HashContext *base)
+{
+    uECC_SHA256_HashContext *context = (uECC_SHA256_HashContext*)base;
+    sha256_init(&context->ctx);
+}
+
+static void _update_sha256(const uECC_HashContext *base,
+			  const uint8_t *message,
+			  unsigned message_size)
+{
+    uECC_SHA256_HashContext *context = (uECC_SHA256_HashContext*)base;
+    sha256_update(&context->ctx, message, message_size);
+}
+
+static void _finish_sha256(const uECC_HashContext *base, uint8_t *hash_result)
+{
+    uECC_SHA256_HashContext *context = (uECC_SHA256_HashContext*)base;
+    sha256_final(&context->ctx, hash_result);
+}
+
 ndn_shared_block_t* ndn_data_create(ndn_block_t* name,
 				    ndn_metainfo_t* metainfo,
 				    ndn_block_t* content,
@@ -154,8 +179,32 @@ ndn_shared_block_t* ndn_data_create(ndn_block_t* name,
 	    uint8_t h[32] = {0};
 	    sha256(data.buf + 2, dl - 66, h);
 	    uECC_Curve curve = uECC_secp256r1();
-	    if (uECC_sign(key, h, sizeof(h), buf + 2, curve) == 0) {
-		free(buf);
+
+	    // allocate memory on heap to avoid stack overflow
+	    uint8_t *tmp = (uint8_t*)malloc(32 + 32 + 64);
+	    if (tmp == NULL) {
+		free((void*)data.buf);
+		return NULL;
+	    }
+	    uECC_SHA256_HashContext *ctx = (uECC_SHA256_HashContext*)
+		malloc(sizeof(uECC_SHA256_HashContext));
+	    if (ctx == NULL) {
+		free(tmp);
+		free((void*)data.buf);
+		return NULL;
+	    }
+	    ctx->uECC.init_hash = &_init_sha256;
+	    ctx->uECC.update_hash = &_update_sha256;
+	    ctx->uECC.finish_hash = &_finish_sha256;
+	    ctx->uECC.block_size = 64;
+	    ctx->uECC.result_size = 32;
+	    ctx->uECC.tmp = tmp;
+	    int res = uECC_sign_deterministic(key, h, sizeof(h), &ctx->uECC,
+					      buf + 2, curve);
+	    free(ctx);
+	    free(tmp);
+	    if (res == 0) {
+		free((void*)data.buf);
 		return NULL;
 	    }
 	}
@@ -310,8 +359,32 @@ ndn_shared_block_t* ndn_data_create2(ndn_name_t* name,
 	    uint8_t h[32] = {0};
 	    sha256(data.buf + 2, dl - 66, h);
 	    uECC_Curve curve = uECC_secp256r1();
-	    if (uECC_sign(key, h, sizeof(h), buf + 2, curve) == 0) {
-		free(buf);
+
+	    // allocate memory on heap to avoid stack overflow
+	    uint8_t *tmp = (uint8_t*)malloc(32 + 32 + 64);
+	    if (tmp == NULL) {
+		free((void*)data.buf);
+		return NULL;
+	    }
+	    uECC_SHA256_HashContext *ctx = (uECC_SHA256_HashContext*)
+		malloc(sizeof(uECC_SHA256_HashContext));
+	    if (ctx == NULL) {
+		free(tmp);
+		free((void*)data.buf);
+		return NULL;
+	    }
+	    ctx->uECC.init_hash = &_init_sha256;
+	    ctx->uECC.update_hash = &_update_sha256;
+	    ctx->uECC.finish_hash = &_finish_sha256;
+	    ctx->uECC.block_size = 64;
+	    ctx->uECC.result_size = 32;
+	    ctx->uECC.tmp = tmp;
+	    int res = uECC_sign_deterministic(key, h, sizeof(h), &ctx->uECC,
+					      buf + 2, curve);
+	    free(ctx);
+	    free(tmp);
+	    if (res == 0) {
+		free((void*)data.buf);
 		return NULL;
 	    }
 	}
