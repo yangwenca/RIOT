@@ -30,6 +30,9 @@
 #include "net/ndn/msg_type.h"
 #include "random.h"
 
+//#define DPRINT(...) printf(__VA_ARGS__)
+#define DPRINT(...) {}
+
 static ndn_app_t* handle = NULL;
 
 static const uint8_t ecc_key_pri[] = {
@@ -54,41 +57,40 @@ static int on_interest(ndn_block_t* interest)
 {
     ndn_block_t in;
     if (ndn_interest_get_name(interest, &in) != 0) {
-	printf("server (pid=%" PRIkernel_pid "): cannot get name from interest"
+	DPRINT("server (pid=%" PRIkernel_pid "): cannot get name from interest"
 	       "\n", handle->id);
 	return NDN_APP_ERROR;
     }
 
-    printf("server (pid=%" PRIkernel_pid "): interest received, name=",
+    DPRINT("server (pid=%" PRIkernel_pid "): interest received, name=",
 	   handle->id);
     ndn_name_print(&in);
     putchar('\n');
 
     ndn_shared_block_t* sdn = ndn_name_append_uint8(&in, 3);
     if (sdn == NULL) {
-	printf("server (pid=%" PRIkernel_pid "): cannot append component to "
+	DPRINT("server (pid=%" PRIkernel_pid "): cannot append component to "
 	       "name\n", handle->id);
 	return NDN_APP_ERROR;
     }
 
     ndn_metainfo_t meta = { NDN_CONTENT_TYPE_BLOB, -1 };
 
-    uint32_t rand = random_uint32();
-    uint8_t* buf = (uint8_t*)(&rand);
-    ndn_block_t content = { buf, sizeof(rand) };
+    uint8_t buf[20] = {0};
+    ndn_block_t content = { buf, sizeof(buf) };
 
     ndn_shared_block_t* sd =
 	ndn_data_create(&sdn->block, &meta, &content,
 			NDN_SIG_TYPE_ECDSA_SHA256, NULL,
 			ecc_key_pri, sizeof(ecc_key_pri));
     if (sd == NULL) {
-	printf("server (pid=%" PRIkernel_pid "): cannot create data block\n",
+	DPRINT("server (pid=%" PRIkernel_pid "): cannot create data block\n",
 	       handle->id);
 	ndn_shared_block_release(sdn);
 	return NDN_APP_ERROR;
     }
 
-    printf("server (pid=%" PRIkernel_pid "): send data to NDN thread, name=",
+    DPRINT("server (pid=%" PRIkernel_pid "): send data to NDN thread, name=",
 	   handle->id);
     ndn_name_print(&sdn->block);
     putchar('\n');
@@ -96,22 +98,22 @@ static int on_interest(ndn_block_t* interest)
 
     // pass ownership of "sd" to the API
     if (ndn_app_put_data(handle, sd) != 0) {
-	printf("server (pid=%" PRIkernel_pid "): cannot put data\n",
+	DPRINT("server (pid=%" PRIkernel_pid "): cannot put data\n",
 	       handle->id);
 	return NDN_APP_ERROR;
     }
 
-    printf("server (pid=%" PRIkernel_pid "): return to the app\n", handle->id);
+    DPRINT("server (pid=%" PRIkernel_pid "): return to the app\n", handle->id);
     return NDN_APP_CONTINUE;
 }
 
 void ndn_producer(void)
 {
-    printf("server (pid=%" PRIkernel_pid "): start\n", thread_getpid());
+    DPRINT("server (pid=%" PRIkernel_pid "): start\n", thread_getpid());
 
     handle = ndn_app_create();
     if (handle == NULL) {
-	printf("server (pid=%" PRIkernel_pid "): cannot create app handle\n",
+	DPRINT("server (pid=%" PRIkernel_pid "): cannot create app handle\n",
 	       thread_getpid());
 	return;
     }
@@ -119,27 +121,27 @@ void ndn_producer(void)
     const char* prefix = "/ndn";
     ndn_shared_block_t* sp = ndn_name_from_uri(prefix, strlen(prefix));
     if (sp == NULL) {
-	printf("server (pid=%" PRIkernel_pid "): cannot create name from uri "
+	DPRINT("server (pid=%" PRIkernel_pid "): cannot create name from uri "
 	       "\"%s\"\n", handle->id, prefix);
 	return;
     }
 
-    printf("server (pid=%" PRIkernel_pid "): register prefix \"%s\"\n",
+    DPRINT("server (pid=%" PRIkernel_pid "): register prefix \"%s\"\n",
 	   handle->id, prefix);
     // pass ownership of "sp" to the API
     if (ndn_app_register_prefix(handle, sp, on_interest) != 0) {
-	printf("server (pid=%" PRIkernel_pid "): failed to register prefix\n",
+	DPRINT("server (pid=%" PRIkernel_pid "): failed to register prefix\n",
 	       handle->id);
 	ndn_app_destroy(handle);
 	return;
     }
 
-    printf("server (pid=%" PRIkernel_pid "): enter app run loop\n",
+    DPRINT("server (pid=%" PRIkernel_pid "): enter app run loop\n",
 	   handle->id);
 
     ndn_app_run(handle);
 
-    printf("server (pid=%" PRIkernel_pid "): returned from app run loop\n",
+    DPRINT("server (pid=%" PRIkernel_pid "): returned from app run loop\n",
 	   handle->id);
 
     ndn_app_destroy(handle);

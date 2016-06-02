@@ -77,6 +77,81 @@ static void test_name_from_uri(void)
 	printf("name_from_uri failed\n");
 }
 
+static void test_name_get_size(void)
+{
+    uint32_t begin, end;
+    const char* uri = "/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd"
+	"/eeeeeeeeee/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj";
+
+    int repeat = 100000;
+    printf("name_get_size start (repeat=%d)\n", repeat);
+
+    ndn_shared_block_t* sn = ndn_name_from_uri(uri, strlen(uri));;
+    if (sn == NULL) {
+	printf("failed\n");
+	return;
+    }
+
+    int r;
+    bool err = false;
+    begin = xtimer_now();
+    for (int i = 0; i < repeat; ++i) {
+	r = ndn_name_get_size_from_block(&sn->block);
+	if (r != 10) {
+	    err = true;
+	    break;
+	}
+    }
+    end = xtimer_now();
+
+    ndn_shared_block_release(sn);
+
+    if (!err)
+	printf("name_get_size finished in %"PRIu32" us"
+	       " (%"PRIu32" us on average)\n",
+	       end - begin, (end - begin) / repeat);
+    else
+	printf("name_get_size failed\n");
+}
+
+static void test_name_get_component(void)
+{
+    uint32_t begin, end;
+    const char* uri = "/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd"
+	"/eeeeeeeeee/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj";
+
+    int repeat = 100000;
+    printf("name_get_component start (repeat=%d)\n", repeat);
+
+    ndn_shared_block_t* sn = ndn_name_from_uri(uri, strlen(uri));;
+    if (sn == NULL) {
+	printf("failed\n");
+	return;
+    }
+
+    int r;
+    ndn_name_component_t comp;
+    bool err = false;
+    begin = xtimer_now();
+    for (int i = 0; i < repeat; ++i) {
+	r = ndn_name_get_component_from_block(&sn->block, 4, &comp);
+	if (r != 0 && comp.buf[0] != 'e' && comp.len != 10) {
+	    err = true;
+	    break;
+	}
+    }
+    end = xtimer_now();
+
+    ndn_shared_block_release(sn);
+
+    if (!err)
+	printf("name_get_component finished in %"PRIu32" us"
+	       " (%"PRIu32" us on average)\n",
+	       end - begin, (end - begin) / repeat);
+    else
+	printf("name_get_component failed\n");
+}
+
 static void test_name_append(void)
 {
     uint32_t begin, end;
@@ -543,6 +618,8 @@ int ndn_test(int argc, char **argv)
 
     if (strcmp(argv[1], "name") == 0) {
 	test_name_from_uri();
+	test_name_get_size();
+	test_name_get_component();
 	test_name_append();
     }
     else if (strcmp(argv[1], "interest") == 0) {
