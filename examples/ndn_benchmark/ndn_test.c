@@ -580,6 +580,30 @@ static void test_malloc(int sz)
 	printf("malloc %d failed\n", sz);
 }
 
+static void test_memset(int sz)
+{
+    int repeat = 100000;
+    printf("memset %d start (repeat=%d)\n", sz, repeat);
+
+    uint8_t *src = (uint8_t*)malloc(sz);
+    if (src == NULL) {
+	printf("failed\n");
+	return;
+    }
+
+    uint32_t begin = xtimer_now();
+    for (int i = 0; i < repeat; ++i) {
+	memset(src, i, sz);
+    }
+    uint32_t end = xtimer_now();
+
+    free(src);
+
+    printf("memset %d finished in %"PRIu32" us"
+	   " (%"PRIu32" us on average)\n", sz,
+	   end - begin, (end - begin) / repeat);
+}
+
 static void test_memcpy(int sz)
 {
     int repeat = 100000;
@@ -603,6 +627,9 @@ static void test_memcpy(int sz)
 	memcpy(dst, src, sz);
     }
     uint32_t end = xtimer_now();
+
+    free(src);
+    free(dst);
 
     printf("memcpy %d finished in %"PRIu32" us"
 	   " (%"PRIu32" us on average)\n", sz,
@@ -634,19 +661,15 @@ int ndn_test(int argc, char **argv)
 	test_data_get_name();
 	test_data_get_content();
     }
-    else if (strcmp(argv[1], "malloc") == 0) {
+    else if (strcmp(argv[1], "memory") == 0) {
 	if (argc < 3) {
-	    printf("usage: %s malloc _size_\n", argv[0]);
+	    printf("usage: %s memory _size_\n", argv[0]);
 	    return 1;
 	}
-	test_malloc(atoi(argv[2]));
-    }
-    else if (strcmp(argv[1], "memcpy") == 0) {
-	if (argc < 3) {
-	    printf("usage: %s memcpy _size_\n", argv[0]);
-	    return 1;
-	}
-	test_memcpy(atoi(argv[2]));
+	int s = atoi(argv[2]);
+	test_malloc(s);
+	test_memset(s);
+	test_memcpy(s);
     }
     else {
         puts("error: invalid command");
