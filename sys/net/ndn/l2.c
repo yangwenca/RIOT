@@ -24,7 +24,7 @@
 
 #include "net/ndn/l2.h"
 
-#define ENABLE_DEBUG (1)
+#define ENABLE_DEBUG (0)
 #include "debug.h"
 
 gnrc_pktsnip_t* ndn_l2_frag_build_hdr(bool mf, uint8_t seq, uint16_t id)
@@ -127,8 +127,8 @@ ndn_shared_block_t* ndn_l2_frag_receive(kernel_pid_t iface,
     if (entry == NULL) {
 	// no existing entry with the same src l2 addr and frag id is found
 	// create entry first
-	DEBUG("ndn: received fragment of a new packet (iface=%"
-	      PRIkernel_pid ")\n", iface);
+	DEBUG("ndn: received fragment of a new packet (iface=%" PRIkernel_pid
+	      ")\n", iface);
 
 	entry = (_l2_frag_entry_t*)malloc(sizeof(_l2_frag_entry_t));
 	if (entry == NULL) {

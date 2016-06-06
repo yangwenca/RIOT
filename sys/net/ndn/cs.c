@@ -23,13 +23,13 @@
 
 #include "net/ndn/cs.h"
 
-#define ENABLE_DEBUG (1)
+#define ENABLE_DEBUG (0)
 #include "debug.h"
 
 static ndn_cs_entry_t *_cs;
 static int _cs_size;
 
-#define MAX_CS_SIZE 1024
+#define MAX_CS_SIZE 24000
 
 static void _ndn_cs_remove(ndn_cs_entry_t* entry)
 {

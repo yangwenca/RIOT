@@ -28,7 +28,7 @@
 
 #include "net/ndn/netif.h"
 
-#define ENABLE_DEBUG (1)
+#define ENABLE_DEBUG (0)
 #include "debug.h"
 
 static ndn_netif_t _netif_table[GNRC_NETIF_NUMOF];
@@ -63,8 +63,8 @@ void ndn_netif_auto_add(void)
 	}
 
 	//XXX: test-only!!!
-	/* if (_netif_table[i].mtu > 10) */
-	/*     _netif_table[i].mtu = 10; */
+	/* if (_netif_table[i].mtu > 40) */
+	/*     _netif_table[i].mtu = 40; */
 
 	// set device net proto to NDN
 	if (gnrc_netapi_get(iface, NETOPT_PROTO, 0,
