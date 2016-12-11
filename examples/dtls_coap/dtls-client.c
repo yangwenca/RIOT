@@ -1,24 +1,4 @@
 /*
- * Copyright (C) 2016 Yang Wen <yangwenca@gmail.com>
- *
- * This file is subject to the terms and conditions of the GNU Lesser
- * General Public License v2.1. See the file LICENSE in the top level
- * directory for more details.
- */
-
-/**
- * @ingroup     examples
- * @{
- *
- * @file
- * @brief       CoAP with DTLS client application
- *
- * @author      Yang Wen <yangwenca@gmail.com>
- * @}
- */
-
-
-/*
  * Copyright (C) 2015 Freie Universität Berlin
  *
  * This file is subject to the terms and conditions of the GNU Lesser
@@ -39,27 +19,6 @@
  * @author      Oliver Hahm <oliver.hahm@inria.fr>
  * @}
  */
-
- 
-/*
- * Copyright (c) 2015-2016 Ken Bannister. All rights reserved.
- *
- * This file is subject to the terms and conditions of the GNU Lesser
- * General Public License v2.1. See the file LICENSE in the top level
- * directory for more details.
- */
-
-/**
- * @ingroup     examples
- * @{
- *
- * @file
- * @brief       gcoap CLI support
- *
- * @author      Ken Bannister <kb2ma@runbox.com>
- *
- * @}
- */ 
 
 #include <stdio.h>
 #include <inttypes.h>
@@ -140,34 +99,30 @@ static const unsigned char ecdsa_pub_key_y[] = {
 
 
 /* CoAP */
-
-
-/* CoAP resources */
-/* static void _resp_handler(unsigned req_state, coap_pkt_t* pdu);
-static ssize_t _stats_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len); */
+static void _resp_handler(unsigned req_state, coap_pkt_t* pdu);
+static ssize_t _stats_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len);
 
 /* CoAP resources */
-/* static const coap_resource_t _resources[] = {
+static const coap_resource_t _resources[] = {
     { "/cli/stats", COAP_GET, _stats_handler },
 };
 static gcoap_listener_t _listener = {
     (coap_resource_t *)&_resources[0],
     sizeof(_resources) / sizeof(_resources[0]),
     NULL
-}; */
-/* Counts requests sent by CLI. */
-//static uint16_t req_count = 0;
+};
 
+
+/* Counts requests sent by CLI. */
+static uint16_t req_count = 0;
 static int dtlsReady = 0;
+
+
 /*
  * Response callback.
  */
-/* static void _resp_handler(unsigned req_state, coap_pkt_t* pdu)
+static void _resp_handler(unsigned req_state, coap_pkt_t* pdu)
 {
-    puts("Enter _resp_handler\n");
-    if (!dtlsReady){
-        return;
-    }
     if (req_state == GCOAP_MEMO_TIMEOUT) {
         printf("gcoap: timeout for msg ID %02u\n", coap_get_id(pdu));
         return;
@@ -187,7 +142,7 @@ static int dtlsReady = 0;
                 || pdu->content_type == COAP_FORMAT_LINK
                 || coap_get_code_class(pdu) == COAP_CLASS_CLIENT_FAILURE
                 || coap_get_code_class(pdu) == COAP_CLASS_SERVER_FAILURE) {
-            Expecting diagnostic payload in failure cases
+            /* Expecting diagnostic payload in failure cases */
             printf(", %u bytes\n%.*s\n", pdu->payload_len, pdu->payload_len,
                                                           (char *)pdu->payload);
         }
@@ -201,26 +156,24 @@ static int dtlsReady = 0;
     }
 }
 
-
+/*
  * Server callback for /cli/stats. Returns the count of packets sent by the
  * CLI.
-
+ */
 static ssize_t _stats_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len)
 {
-    puts("enter _stats_handler\n");
     gcoap_resp_init(pdu, buf, len, COAP_CODE_CONTENT);
 
     size_t payload_len = fmt_u16_dec((char *)pdu->payload, req_count);
 
     return gcoap_finish(pdu, payload_len, COAP_FORMAT_TEXT);
 }
-
 static size_t _send(uint8_t *buf, size_t len, char *addr_str, uint16_t port)
 {
     ipv6_addr_t addr;
     size_t bytes_sent;
 
-    parse destination address
+    /* parse destination address */
     if (ipv6_addr_from_str(&addr, addr_str) == NULL) {
         puts("gcoap_cli: unable to parse destination address");
         return 0;
@@ -236,7 +189,8 @@ static size_t _send(uint8_t *buf, size_t len, char *addr_str, uint16_t port)
         req_count++;
     }
     return bytes_sent;
-} */
+}
+
 
 /**
  * @brief This care about getting messages and continue with the DTLS flights.
@@ -500,6 +454,20 @@ static int send_to_peer(struct dtls_context_t *ctx,
     return len;
 }
 
+/* static int dtlsReady = 0;
+int handle_dtls_event (struct dtls_context_t *ctx, 
+        session_t *session, dtls_alert_level_t level, unsigned short code)
+{
+    puts("Enter the function\n");
+    printf("what is the code %04x \n", code);
+    if (level > 0) {
+        puts("DTLS ERROR EVENT\n");
+    } else if (code == DTLS_EVENT_CONNECTED) {
+        dtlsReady = 1;
+    }
+
+    return 0;
+} */
 
 /***
  *  This is a custom function for preparing the SIGNAL events and
@@ -559,7 +527,10 @@ static void init_dtls(session_t *dst, char *addr_str)
 
     return;
 }
-
+char *method_codes[] = {"get", "post", "put"};
+uint8_t mybuf[GCOAP_PDU_BUF_SIZE];
+coap_pkt_t pdu;
+size_t len;
 /**
  * This is the "client" part of this program.
  * Will be called each time a message is transmitted.
@@ -567,10 +538,7 @@ static void init_dtls(session_t *dst, char *addr_str)
 static void client_send(char *addr_str, char *data, unsigned int delay, char *method)
 {
     /* Ordered like the RFC method code numbers, but off by 1. GET is code 0. */
-/*     char *method_codes[] = {"get", "post", "put"};
-    uint8_t buf[GCOAP_PDU_BUF_SIZE];
-    coap_pkt_t pdu;
-    size_t len; */
+
     
     static int8_t iWatch;
     static session_t dst;
@@ -655,19 +623,20 @@ static void client_send(char *addr_str, char *data, unsigned int delay, char *me
         iWatch--;
     } /*END while*/
     printf("sending value for dtlsReady %d \n", dtlsReady);
+    xtimer_usleep(delay);
     if (dtlsReady){
         puts("Can handle coap request and response\n");
-/*          for (size_t i = 0; i < sizeof(method_codes) / sizeof(char*); i++) {
+        for (size_t i = 0; i < sizeof(method_codes) / sizeof(char*); i++) {
             if (strcmp(method, method_codes[i]) == 0) {
-                len = gcoap_request(&pdu, &buf[0], GCOAP_PDU_BUF_SIZE, i+1, data);
+                len = gcoap_request(&pdu, &mybuf[0], GCOAP_PDU_BUF_SIZE, i+1, data);
                     
                 printf("gcoap_cli: sending msg ID %u, %u bytes\n", coap_get_id(&pdu),
                                                                        (unsigned) len);
-                if (!_send(&buf[0], len, addr_str, DEFAULT_PORT)) {
+                if (!_send(&mybuf[0], len, addr_str, DEFAULT_PORT)) {
                     puts("gcoap_cli: msg send failed");
                 }
             }
-        } */
+        } 
     }
 
     dtls_free_context(dtls_context);
@@ -695,11 +664,8 @@ int udp_client_cmd(int argc, char **argv)
 
     return 0;
 }
-/* void gcoap_cli_init(void)
+
+void gcoap_cli_init(void)
 {
-    if (dtlsReady){
-        puts("enter gcoap_cli_init\n");
-        gcoap_register_listener(&_listener);
-    }
-    puts("gcoap_cli_init outside\n");
-} */
+    gcoap_register_listener(&_listener);
+}
