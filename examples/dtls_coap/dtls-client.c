@@ -1,4 +1,23 @@
 /*
+ * Copyright (C) 2016 Yang Wen <yangwenca@gmail.com>
+ *
+ * This file is subject to the terms and conditions of the GNU Lesser
+ * General Public License v2.1. See the file LICENSE in the top level
+ * directory for more details.
+ */
+/**
+ * @ingroup     examples
+ * @{
+ *
+ * @file
+ * @brief       CoAP with DTLS client application
+ *
+ * @author      Yang Wen <yangwenca@gmail.com>
+ * @}
+ */
+
+
+/*
  * Copyright (C) 2015 Freie Universität Berlin
  *
  * This file is subject to the terms and conditions of the GNU Lesser
@@ -19,6 +38,30 @@
  * @author      Oliver Hahm <oliver.hahm@inria.fr>
  * @}
  */
+
+
+/*
+ * Copyright (c) 2015-2016 Ken Bannister. All rights reserved.
+ *
+ * This file is subject to the terms and conditions of the GNU Lesser
+ * General Public License v2.1. See the file LICENSE in the top level
+ * directory for more details.
+ */
+
+/**
+ * @ingroup     examples
+ * @{
+ *
+ * @file
+ * @brief       gcoap CLI support
+ *
+ * @author      Ken Bannister <kb2ma@runbox.com>
+ *
+ * @}
+*/ 
+
+
+
 
 #include <stdio.h>
 #include <inttypes.h>
@@ -115,7 +158,6 @@ static gcoap_listener_t _listener = {
 
 /* Counts requests sent by CLI. */
 static uint16_t req_count = 0;
-static int dtlsReady = 0;
 
 
 /*
@@ -230,18 +272,9 @@ static void dtls_handle_read(dtls_context_t *ctx, gnrc_pktsnip_t *pkt)
 
     ipv6_addr_from_str(&session.addr, addr_str);
     
-    dtls_peer_t *peer = dtls_get_peer(ctx, &session);
-/*     printf("what is the code %04x \n", peer->state);
-    if (peer && peer->state == DTLS_STATE_CONNECTED){
-        dtlsReady = 1;
-    } */
 
     dtls_handle_message(ctx, &session, pkt->data, (unsigned int)pkt->size);
     
-    printf("after the session what is the code %04x \n", peer->state);
-    if (peer && peer->state == DTLS_STATE_WAIT_SERVERCERTIFICATE){
-        dtlsReady = 1;
-    }
 
 }
 
@@ -622,9 +655,9 @@ static void client_send(char *addr_str, char *data, unsigned int delay, char *me
 
         iWatch--;
     } /*END while*/
-    printf("sending value for dtlsReady %d \n", dtlsReady);
+
     xtimer_usleep(delay);
-    if (dtlsReady){
+    if (1){
         puts("Can handle coap request and response\n");
         for (size_t i = 0; i < sizeof(method_codes) / sizeof(char*); i++) {
             if (strcmp(method, method_codes[i]) == 0) {
@@ -659,6 +692,7 @@ int udp_client_cmd(int argc, char **argv)
     else if (argc > 4) {
         delay = (uint32_t)atoi(argv[5]);
     }
+
     client_send(argv[2], argv[3],  delay, argv[1]);
 
 

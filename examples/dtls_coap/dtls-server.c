@@ -1,4 +1,41 @@
 /*
+ * Copyright (C) 2016 Yang Wen <yangwenca@gmail.com>
+ *
+ * This file is subject to the terms and conditions of the GNU Lesser
+ * General Public License v2.1. See the file LICENSE in the top level
+ * directory for more details.
+ */
+/**
+ * @ingroup     examples
+ * @{
+ *
+ * @file
+ * @brief       CoAP with DTLS server application
+ *
+ * @author      Yang Wen <yangwenca@gmail.com>
+ * @}
+ */
+
+/*
+ * Copyright (C) 2016 Kaspar Schleiser <kaspar@schleiser.de>
+ *
+ * This file is subject to the terms and conditions of the GNU Lesser
+ * General Public License v2.1. See the file LICENSE in the top level
+ * directory for more details.
+ */
+
+/**
+ * @ingroup     examples
+ * @{
+ *
+ * @file
+ * @brief       CoAP example server application (using nanocoap)
+ *
+ * @author      Kaspar Schleiser <kaspar@schleiser.de>
+ * @}
+ */
+
+/*
  * Copyright (C) 2015 Freie Universität Berlin
  *
  * This file is subject to the terms and conditions of the GNU Lesser
@@ -85,8 +122,7 @@ char _server_stack[THREAD_STACKSIZE_MAIN + THREAD_EXTRA_STACKSIZE_PRINTF];
 
 static kernel_pid_t _dtls_kernel_pid;
 
-static int dtlsReady = 0;
-static int count = 0;
+
 /**
  * @brief This care about getting messages and continue with the DTLS flights
  */
@@ -126,12 +162,7 @@ static void dtls_handle_read(dtls_context_t *ctx, gnrc_pktsnip_t *pkt)
     dtls_handle_message(ctx, &session, pkt->data, (unsigned int)pkt->size);
     
     
-    dtls_peer_t *peer = dtls_get_peer(ctx, &session);
-    printf("after the session what is the code %04x \n", peer->state);
-    count++;
-    if ((peer && peer->state == DTLS_STATE_WAIT_SERVERCERTIFICATE) || (count==2)){
-        dtlsReady = 1;
-    }
+
     
 }
 
@@ -393,6 +424,18 @@ void *dtls_server_wrapper(void *arg)
     while (1) {
 
 
+        msg_receive(&msg);
+
+        DEBUG("DBG-Server: Record Rcvd!\n");
+        dtls_handle_read(dtls_context, (gnrc_pktsnip_t *)(msg.content.ptr));
+
+        puts("server side can handle coap request and response\n");
+            
+        sock_udp_ep_t local = { .port=DEFAULT_PORT, .family=AF_INET6 };
+        nanocoap_server(&local, buf, sizeof(buf));
+
+
+/*
         printf("receiving value for dtlsReady %d \n", dtlsReady);
         if (dtlsReady){
             puts("server side can handle coap request and response\n");
@@ -400,12 +443,13 @@ void *dtls_server_wrapper(void *arg)
             sock_udp_ep_t local = { .port=DEFAULT_PORT, .family=AF_INET6 };
             nanocoap_server(&local, buf, sizeof(buf));
         }else{
-            /* wait for a message */
             msg_receive(&msg);
 
             DEBUG("DBG-Server: Record Rcvd!\n");
             dtls_handle_read(dtls_context, (gnrc_pktsnip_t *)(msg.content.ptr));
         }
+
+*/
     } /*While */
     
 
@@ -416,7 +460,6 @@ void *dtls_server_wrapper(void *arg)
 static void start_server(void)
 {
     uint16_t port;
-    count = 0;
 
     port = (uint16_t)DEFAULT_PORT;
 
