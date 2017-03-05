@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Yang Wen <yangwenca@gmail.com>
+ * Copyright (C) 2017 Yang Wen <yangwenca@gmail.com>
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -60,6 +60,8 @@
 
 #include <stdio.h>
 #include <inttypes.h>
+// nanocoap server
+#include <errno.h>
 
 #include "net/gnrc.h"
 #include "net/gnrc/ipv6.h"
@@ -74,11 +76,13 @@
 #include "dtls_debug.h"
 #include "tinydtls.h"
 
-#define ENABLE_DEBUG  (1)
+#define ENABLE_DEBUG  (0)
 #include "debug.h"
 
 //#define DEFAULT_PORT 20220    /* DTLS default port  */
 #define DEFAULT_PORT 61618      /* First valid FEBx address  */
+
+#define DTLS_STOP_SERVER_MSG    0x4001
 
 /* CoAP */
 #include "nanocoap.h"
@@ -91,6 +95,7 @@
 /* TODO: MAke this local! */
 static dtls_context_t *dtls_context = NULL;
 
+#ifdef DTLS_ECC
 static const unsigned char ecdsa_priv_key[] = {
     0xD9, 0xE2, 0x70, 0x7A, 0x72, 0xDA, 0x6A, 0x05,
     0x04, 0x99, 0x5C, 0x86, 0xED, 0xDB, 0xE3, 0xEF,
@@ -111,6 +116,7 @@ static const unsigned char ecdsa_pub_key_y[] = {
     0xD0, 0x43, 0xB1, 0xFB, 0x03, 0xE2, 0x2F, 0x4D,
     0x17, 0xDE, 0x43, 0xF9, 0xF9, 0xAD, 0xEE, 0x70
 };
+#endif
 
 
 static gnrc_netreg_entry_t server = GNRC_NETREG_ENTRY_INIT_PID(
@@ -118,11 +124,12 @@ static gnrc_netreg_entry_t server = GNRC_NETREG_ENTRY_INIT_PID(
                                                      KERNEL_PID_UNDEF);
 
 #define READER_QUEUE_SIZE (8U)
-char _server_stack[THREAD_STACKSIZE_MAIN + THREAD_EXTRA_STACKSIZE_PRINTF];
-
-static kernel_pid_t _dtls_kernel_pid;
+static char _server_stack[THREAD_STACKSIZE_MAIN + THREAD_EXTRA_STACKSIZE_PRINTF];
 
 
+
+static int dtlsReady = 0;
+static int counter = 0;
 /**
  * @brief This care about getting messages and continue with the DTLS flights
  */
@@ -159,6 +166,17 @@ static void dtls_handle_read(dtls_context_t *ctx, gnrc_pktsnip_t *pkt)
 
     ipv6_addr_from_str(&session.addr, addr_str);
 
+    dtls_peer_t *peer = dtls_get_peer(ctx, &session);
+    
+    if (peer && peer->state == DTLS_STATE_CONNECTED){
+        if (counter == 0){
+            dtlsReady = 1;
+        }
+        counter = counter + 1;
+        counter = counter % 2;
+    }
+    
+    
     dtls_handle_message(ctx, &session, pkt->data, (unsigned int)pkt->size);
     
     
@@ -168,7 +186,7 @@ static void dtls_handle_read(dtls_context_t *ctx, gnrc_pktsnip_t *pkt)
 
 
 /**
- * @brief We got the TinyDTLS App Data message and answer with the same
+ * @brief Reception of a DTLS Applicaiton data record.
  */
 static int read_from_peer(struct dtls_context_t *ctx,
                           session_t *session, uint8 *data, size_t len)
@@ -177,18 +195,18 @@ static int read_from_peer(struct dtls_context_t *ctx,
 
 #if ENABLE_DEBUG == 1
   size_t i;
-  DEBUG("\nDBG-Server: Data from Client: ---");
+  DEBUG("\nServer: Data rcvd: ---");
     for (i = 0; i < len; i++)
         DEBUG("%c", data[i]);
     DEBUG("--- \t Sending echo..\n");
 #endif
-    /* echo incoming application data */
-    dtls_write(ctx, session, data, len);
-    return 0;
+
+    /* echo back the application data rcvd. */
+    return dtls_write(ctx, session, data, len);
 }
 
 /**
- * @brief This will try to transmit using only GNRC stack (non-socket).
+ * @brief Handles the transmission of packets. Only GNRC stack (non-socket).
  */
 static int gnrc_sending(char *addr_str, char *data, size_t data_len, unsigned short rem_port )
 {
@@ -196,7 +214,7 @@ static int gnrc_sending(char *addr_str, char *data, size_t data_len, unsigned sh
     ipv6_addr_t addr;
     gnrc_pktsnip_t *payload, *udp, *ip;
 
-    /* parse destination address */
+    /* Parse destination address */
     if (ipv6_addr_from_str(&addr, addr_str) == NULL) {
         puts("Error: unable to parse destination address");
         return -1;
@@ -209,7 +227,7 @@ static int gnrc_sending(char *addr_str, char *data, size_t data_len, unsigned sh
         return -1;
     }
 
-    /* allocate UDP header */
+    /* Allocate UDP header */
     udp = gnrc_udp_hdr_build(payload, DEFAULT_PORT, rem_port);
     if (udp == NULL) {
         puts("Error: unable to allocate UDP header");
@@ -217,7 +235,7 @@ static int gnrc_sending(char *addr_str, char *data, size_t data_len, unsigned sh
         return -1;
     }
 
-    /* allocate IPv6 header */
+    /* Allocate IPv6 header */
     ip = gnrc_ipv6_hdr_build(udp, NULL, &addr);
     if (ip == NULL) {
         puts("Error: unable to allocate IPv6 header");
@@ -228,24 +246,18 @@ static int gnrc_sending(char *addr_str, char *data, size_t data_len, unsigned sh
 
     DEBUG("DBG-Server: Sending record to peer\n");
 
-    /*
-     * WARNING: Too fast and the nodes dies in middle of retransmissions.
-     *         This issue appears in the FIT-Lab (m3 motes).
-     */
-    xtimer_usleep(500000);
-
-    /* Probably this part will be removed.  **/
+    /*TEST: Probably this part will be removed.  **/
     if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_UDP, GNRC_NETREG_DEMUX_CTX_ALL, ip)) {
         puts("Error: unable to locate UDP thread");
         gnrc_pktbuf_release(ip);
         return -1;
     }
 
-    return 1;
+    return 0;
 }
 
 /**
- * @brief We communicate with the other peer.
+ * @brief Handles the DTLS communication with the other peer.
  */
 static int send_to_peer(struct dtls_context_t *ctx,
                         session_t *session, uint8 *buf, size_t len)
@@ -345,7 +357,7 @@ static int peer_verify_ecdsa_key(struct dtls_context_t *ctx,
 #endif /* DTLS_ECC */
 
 /**
- * @brief We prepare the DTLS for this node.
+ * @brief DTLS variables and register are initialized.
  */
 static void init_dtls(void)
 {
@@ -373,14 +385,15 @@ static void init_dtls(void)
     DEBUG("DBG-Server On\n");
 
     /*
-     * The context for the server is a little different from the client.
-     * The simplicity of GNRC do not mix transparently with
-     * the DTLS Context. At this point, the server need a fresh context
-     * however dtls_context->app must be populated with an unknown
-     * IPv6 address.
+     * The context for the server is different from the client.
+     * The simplicity of GNRC does not mix transparently with
+     * TinyDTLS Context.
      *
-     * The non-valid Ipv6 address ( :: ) is discarded due the chaos.
-     * For now, the first value will be the loopback.
+     * At this point, the server requires a fresh context, however,
+     * dtls_context->app must be populated with an unknown IPv6 address.
+     * Currently, this is fixed by using the Loopback addresses (::1).
+     * The non-valid Ipv6 address ( :: ) was discarded due to issues with it.
+     *
      */
     char *addr_str = "::1";
 
@@ -400,30 +413,75 @@ static void init_dtls(void)
 
 
 }
+static sock_udp_t sock;
+static sock_udp_ep_t remote;
+static ssize_t res;
+// Coap server
+int coap_server(sock_udp_ep_t *local, uint8_t *buf, size_t bufsize)
+{
+    //sock_udp_t sock;
+    //sock_udp_ep_t remote;
+
+    if (!local->port) {
+        local->port = COAP_PORT;
+    }
+
+    res = sock_udp_create(&sock, local, NULL, 0);
+    if (res == -1) {
+        return -1;
+    }
+
+    while(1) {
+        res = sock_udp_recv(&sock, buf, bufsize, -1, &remote);
+        if (res == -1) {
+            DEBUG("error receiving UDP packet\n");
+            return -1;
+        }
+        else {
+            coap_pkt_t pkt;
+            if (coap_parse(&pkt, (uint8_t*)buf, res) < 0) {
+                DEBUG("error parsing packet\n");
+            }
+            if ((res = coap_handle_req(&pkt, buf, bufsize)) > 0) {
+                res = sock_udp_send(&sock, buf, res, &remote);
+            }
+            break;
+        }
+    }
+
+    return 0;
+}
+
+
 
 /* NOTE: wrapper or trampoline ? (Syntax question) */
-uint8_t buf[COAP_INBUF_SIZE];
+static uint8_t buf[COAP_INBUF_SIZE];
 void *dtls_server_wrapper(void *arg)
 {
     (void) arg; /* TODO: Remove? We don't have args at all (NULL) */
 
     msg_t _reader_queue[READER_QUEUE_SIZE];
     msg_t msg;
+    bool active = true;
 
     /* The GNRC examples uses packet dump but we want a custom one */
     msg_init_queue(_reader_queue, READER_QUEUE_SIZE);
 
-    init_dtls();
+    dtls_init(); /*TinyDTLS mandatory settings*/
+    init_dtls(); /*RIOT GNRC settings for preparing the server*/
 
     /*
-     * FIXME: After mutliple retransmissions, and canceled client's sessions
-     * the server become unable to sent NDP NA messages. Still, the TinyDTLS
+     * FIXME: After mutliple DTLS sessiosn established the server becomes
+     * unable to sent NDP NA messages or even pings. Still, the TinyDTLS
      * debugs seems to be fine.
+     *
+     * NOTE: This seems to be a problem with DTLS Sessions buffer saturating
+     * the avaliable RAM.
      */
 
-    while (1) {
+    while (active) {
 
-
+/*
         msg_receive(&msg);
 
         DEBUG("DBG-Server: Record Rcvd!\n");
@@ -434,27 +492,33 @@ void *dtls_server_wrapper(void *arg)
         sock_udp_ep_t local = { .port=DEFAULT_PORT, .family=AF_INET6 };
         nanocoap_server(&local, buf, sizeof(buf));
 
+*/
 
-/*
-        printf("receiving value for dtlsReady %d \n", dtlsReady);
-        if (dtlsReady){
+        if (dtlsReady == 1){
             puts("server side can handle coap request and response\n");
-            
             sock_udp_ep_t local = { .port=DEFAULT_PORT, .family=AF_INET6 };
-            nanocoap_server(&local, buf, sizeof(buf));
-        }else{
-            msg_receive(&msg);
-
+            coap_server(&local, buf, sizeof(buf));
+            dtlsReady = 0;
+        }
+        
+        /* wait for a (thread) message */
+        msg_receive(&msg);
+        /* check if the server stop message has been received */
+        if (msg.type == DTLS_STOP_SERVER_MSG ){
+            active = false;
+            //break;
+        }
+        else { /* Normal operation */
             DEBUG("DBG-Server: Record Rcvd!\n");
             dtls_handle_read(dtls_context, (gnrc_pktsnip_t *)(msg.content.ptr));
         }
+        
 
-*/
+
     } /*While */
     
-
-    
     dtls_free_context(dtls_context);
+    return (void *) NULL;
 }
 
 static void start_server(void)
@@ -463,45 +527,60 @@ static void start_server(void)
 
     port = (uint16_t)DEFAULT_PORT;
 
-    (void) _dtls_kernel_pid;
-
+    dtlsReady = 0;
+    
     /* Only one instance of the server */
     if (server.target.pid != KERNEL_PID_UNDEF) {
-        printf("Error: server already running\n");
+        puts("Error: server already running");
         return;
     }
-
-    /*TESTING tinydtls*/
-    dtls_init();
 
     /* The server is initialized  */
     server.target.pid = thread_create(_server_stack, sizeof(_server_stack),
                                THREAD_PRIORITY_MAIN - 1,
                                THREAD_CREATE_STACKTEST,
-                               dtls_server_wrapper, NULL, "DTLS Server");
+                               dtls_server_wrapper, NULL, "DTLS_Server");
+
+    /*Uncommon but better be sure */
+    if (server.target.pid == EINVAL){
+      puts("ERROR: Thread invalid");
+      return;
+    }
+    if (server.target.pid == EOVERFLOW){
+      puts("ERROR: Threads overflow!");
+      return;
+    }
 
     server.demux_ctx = (uint32_t)port;
 
     if (gnrc_netreg_register(GNRC_NETTYPE_UDP, &server) == 0)
       printf("Success: started DTLS server on port %" PRIu16 "\n", port);
    else
-      printf("FAILURE: The UDP port is not registered!\n");
+      puts("ERROR: The UDP port is not registered!");
 }
 
 static void stop_server(void)
 {
     /* check if server is running at all */
     if (server.target.pid == KERNEL_PID_UNDEF) {
-        printf("Error: server was not running\n");
+        puts("Error: server was not running");
         return;
     }
 
-    dtls_free_context(dtls_context);
+    /* prepare the stop message */
+    msg_t m = {
+        thread_getpid(),
+        DTLS_STOP_SERVER_MSG,
+        { NULL }
+    };
 
-    /* stop server */
+    /* send the stop message to thread */
+    msg_send(&m, server.target.pid);
+
+    /* Release UDP port and PID */
     gnrc_netreg_unregister(GNRC_NETTYPE_UDP, &server);
     server.target.pid = KERNEL_PID_UNDEF;
-    puts("Success: stopped DTLS server");
+    DEBUG("Success: stopped DTLS server");
 }
 
 int udp_server_cmd(int argc, char **argv)
